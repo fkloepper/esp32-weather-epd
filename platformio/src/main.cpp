@@ -273,19 +273,57 @@ void setup()
     powerOffDisplay();
     beginDeepSleep(startTime, &timeInfo);
   }
-  rxStatus = getOWMairpollution(client, owm_air_pollution);
-  if (rxStatus != HTTP_CODE_OK)
+  // AIR POLLUTION - use NVS cache when data is < 1 hour old.
+  // OWM updates this endpoint hourly, so fetching every 30min is wasteful.
+  // Cache is invalidated if struct size changes (firmware update).
+  prefs.begin(NVS_NAMESPACE, false);
+  bool aqCacheHit = false;
   {
-    killWiFi();
-    statusStr = "Air Pollution API";
-    tmpStr = String(rxStatus, DEC) + ": " + getHttpResponsePhrase(rxStatus);
-    initDisplay();
-    do
+    time_t now;
+    time(&now);
+    int64_t lastFetch = prefs.getLong64("aqFetchTime", 0);
+    uint32_t cachedSize = prefs.getUInt("aqStructSize", 0);
+    if (cachedSize == sizeof(owm_resp_air_pollution_t)
+        && (now - lastFetch) < 3600)
     {
-      drawError(wi_cloud_down_196x196, statusStr, tmpStr);
-    } while (display.nextPage());
-    powerOffDisplay();
-    beginDeepSleep(startTime, &timeInfo);
+      size_t readLen = prefs.getBytes("aqCache", &owm_air_pollution,
+                                      sizeof(owm_air_pollution));
+      aqCacheHit = (readLen == sizeof(owm_air_pollution));
+      if (aqCacheHit)
+      {
+        Serial.println("Air Pollution: using NVS cache ("
+                       + String((int)(now - lastFetch)) + "s old)");
+      }
+    }
+  }
+  prefs.end();
+
+  if (!aqCacheHit)
+  {
+    rxStatus = getOWMairpollution(client, owm_air_pollution);
+    if (rxStatus != HTTP_CODE_OK)
+    {
+      killWiFi();
+      statusStr = "Air Pollution API";
+      tmpStr = String(rxStatus, DEC) + ": " + getHttpResponsePhrase(rxStatus);
+      initDisplay();
+      do
+      {
+        drawError(wi_cloud_down_196x196, statusStr, tmpStr);
+      } while (display.nextPage());
+      powerOffDisplay();
+      beginDeepSleep(startTime, &timeInfo);
+    }
+    // Cache successful response
+    prefs.begin(NVS_NAMESPACE, false);
+    {
+      time_t now;
+      time(&now);
+      prefs.putBytes("aqCache", &owm_air_pollution, sizeof(owm_air_pollution));
+      prefs.putLong64("aqFetchTime", (int64_t)now);
+      prefs.putUInt("aqStructSize", sizeof(owm_air_pollution));
+    }
+    prefs.end();
   }
   killWiFi(); // WiFi no longer needed
 
