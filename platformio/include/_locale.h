@@ -38,7 +38,7 @@ extern const char *LC_ERA_D_FMT;
 extern const char *LC_ERA_D_T_FMT;
 extern const char *LC_ERA_T_FMT;
 
-// OWM LANGUAGE
+// configured language
 extern const String OWM_LANG;
 
 // CURRENT CONDITIONS
@@ -167,6 +167,7 @@ extern const std::vector<String> TERM_HURRICANE_WARNING;
 extern const std::vector<String> TERM_HURRICANE;
 extern const std::vector<String> TERM_DUST;
 extern const std::vector<String> TERM_STRONG_WIND;
+extern const std::vector<String> TERM_UV_INDEX;
 
 // AIR QUALITY INDEX
 extern "C" {

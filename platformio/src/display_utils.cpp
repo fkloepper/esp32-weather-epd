@@ -40,15 +40,34 @@ uint32_t readBatteryVoltage()
   // __attribute__((unused)) disables compiler warnings about this variable
   // being unused (Clang, GCC) which is the case when DEBUG_LEVEL == 0.
   esp_adc_cal_value_t val_type __attribute__((unused));
+
+  // IO2 (D9) steuert den MOSFET (K1) der den Spannungsteiler (R15+R14)
+  // mit VBAT verbindet. Ohne diesen Schritt liegt GPIO34 floating → liest 0.
+  pinMode(2, OUTPUT);
+  digitalWrite(2, LOW);
+  delay(10); // Warten bis MOSFET offen und Spannung stabil
+
+  // GPIO34 = ADC1_CH6, direkt über ESP-IDF konfigurieren.
+  // ADC_ATTEN_DB_12 gibt einen Messbereich von ~150mV bis 2450mV,
+  // ausreichend für ~2.1V (halbe Batteriespannung bei vollem Akku).
+  adc1_config_width(ADC_WIDTH_BIT_12);
+  adc1_config_channel_atten(ADC1_CHANNEL_6, ADC_ATTEN_DB_12);
+
   adc_power_acquire();
-  uint16_t adc_val = analogRead(PIN_BAT_ADC);
+  // adc1_get_raw() statt analogRead(), da der Kanal direkt über
+  // die ESP-IDF API konfiguriert wurde.
+  uint16_t adc_val = adc1_get_raw(ADC1_CHANNEL_6);
   adc_power_release();
+
+  // IO2 wieder als Input freigeben, damit die onboard LED (ebenfalls
+  // an IO2/D9) nicht beeinflusst wird.
+  pinMode(2, INPUT);
 
   // We will use the eFuse ADC calibration bits, to get accurate voltage
   // readings. The DFRobot FireBeetle Esp32-E V1.0's ADC is 12 bit, and uses
   // 11db attenuation, which gives it a measurable input voltage range of 150mV
   // to 2450mV.
-  val_type = esp_adc_cal_characterize(ADC_UNIT_1, ADC_ATTEN_11db,
+  val_type = esp_adc_cal_characterize(ADC_UNIT_1, ADC_ATTEN_DB_12,
                                       ADC_WIDTH_BIT_12, 1100, &adc_chars);
 
 #if DEBUG_LEVEL >= 1
@@ -280,12 +299,12 @@ int eventUrgency(const String &event)
  * // Save only the 2 most recent alerts
  * If (more than 2 weather alerts remain)
  *   Keep only the 2 most recently issued alerts (aka greatest "start" time)
- *   OpenWeatherMap provides this order, so we can just take index 0 and 1.
+ *   Open-Meteo provides this order, so we can just take index 0 and 1.
  *
  * Truncate Extraneous Info (anything that follows a comma, period, or open
  *   parentheses)
  */
-void filterAlerts(std::vector<owm_alerts_t> &resp, int *ignore_list)
+void filterAlerts(std::vector<weather_alert_t> &resp, int *ignore_list)
 {
   // Convert all event text and tags to lowercase.
   for (auto &alert : resp)
@@ -425,7 +444,7 @@ const uint8_t *getWiFiBitmap16(int rssi)
  */
 bool isDay(String icon)
 {
-  // OpenWeatherMap indicates sun is up with d otherwise n for night
+  // Icon is set to "01d" (day) or "01n" (night) by the Open-Meteo parser
   return icon.endsWith("d");
 }
 
@@ -463,17 +482,13 @@ bool isWindy(float wind_speed, float wind_gust) {
       || wind_gust  >= 40.2 /*m/s*/);
 }
 
-/* Takes the current weather and today's daily weather forcast (from
- * OpenWeatherMap API response) and returns a pointer to the icon's 196x196
- * bitmap.
+/* Takes the current weather and today's daily weather forecast and returns a
+ * pointer to the icon bitmap.
  *
- * Uses multiple factors to return more detailed icons than the simple icon
- * catagories that OpenWeatherMap provides.
+ * Uses WMO weather interpretation codes (stored in weather.id by the
+ * Open-Meteo parser) to select the most appropriate icon.
  *
- * Last Updated: June 26, 2022
- *
- * References:
- *   https://openweathermap.org/weather-conditions
+ * WMO code reference: https://open-meteo.com/en/docs (WMO Weather Codes table)
  */
 template <int BitmapSize>
 const uint8_t *getConditionsBitmap(int id, bool day, bool moon, bool cloudy,
@@ -481,151 +496,133 @@ const uint8_t *getConditionsBitmap(int id, bool day, bool moon, bool cloudy,
 {
   switch (id)
   {
-  // Group 2xx: Thunderstorm
-  case 200: // Thunderstorm  thunderstorm with light rain     11d
-  case 201: // Thunderstorm  thunderstorm with rain           11d
-  case 202: // Thunderstorm  thunderstorm with heavy rain     11d
-  case 210: // Thunderstorm  light thunderstorm               11d
-  case 211: // Thunderstorm  thunderstorm                     11d
-  case 212: // Thunderstorm  heavy thunderstorm               11d
-  case 221: // Thunderstorm  ragged thunderstorm              11d
-    if (!cloudy && day)          {return getBitmap(wi_day_thunderstorm, BitmapSize);}
-    if (!cloudy && !day && moon) {return getBitmap(wi_night_alt_thunderstorm, BitmapSize);}
-    return getBitmap(wi_thunderstorm, BitmapSize);
-  case 230: // Thunderstorm  thunderstorm with light drizzle  11d
-  case 231: // Thunderstorm  thunderstorm with drizzle        11d
-  case 232: // Thunderstorm  thunderstorm with heavy drizzle  11d
-    if (!cloudy && day)          {return getBitmap(wi_day_storm_showers, BitmapSize);}
-    if (!cloudy && !day && moon) {return getBitmap(wi_night_alt_storm_showers, BitmapSize);}
-    return getBitmap(wi_storm_showers, BitmapSize);
-  // Group 3xx: Drizzle
-  case 300: // Drizzle       light intensity drizzle          09d
-  case 301: // Drizzle       drizzle                          09d
-  case 302: // Drizzle       heavy intensity drizzle          09d
-  case 310: // Drizzle       light intensity drizzle rain     09d
-  case 311: // Drizzle       drizzle rain                     09d
-  case 312: // Drizzle       heavy intensity drizzle rain     09d
-  case 313: // Drizzle       shower rain and drizzle          09d
-  case 314: // Drizzle       heavy shower rain and drizzle    09d
-  case 321: // Drizzle       shower drizzle                   09d
+  // 0: Clear sky
+  case 0:
+    if (windy)          {return getBitmap(wi_strong_wind, BitmapSize);}
+    if (!day && moon)   {return getBitmap(wi_night_clear, BitmapSize);}
+    if (!day && !moon)  {return getBitmap(wi_stars, BitmapSize);}
+    return getBitmap(wi_day_sunny, BitmapSize);
+
+  // 1: Mainly clear
+  case 1:
+    if (windy)          {return getBitmap(wi_strong_wind, BitmapSize);}
+    if (!day && moon)   {return getBitmap(wi_night_alt_partly_cloudy, BitmapSize);}
+    if (!day && !moon)  {return getBitmap(wi_stars, BitmapSize);}
+    return getBitmap(wi_day_sunny_overcast, BitmapSize);
+
+  // 2: Partly cloudy
+  case 2:
+    if (windy && day)          {return getBitmap(wi_day_cloudy_gusts, BitmapSize);}
+    if (windy && !day && moon) {return getBitmap(wi_night_alt_cloudy_gusts, BitmapSize);}
+    if (windy)                 {return getBitmap(wi_cloudy_gusts, BitmapSize);}
+    if (!day && moon)          {return getBitmap(wi_night_alt_cloudy, BitmapSize);}
+    if (!day && !moon)         {return getBitmap(wi_cloud, BitmapSize);}
+    return getBitmap(wi_day_cloudy, BitmapSize);
+
+  // 3: Overcast
+  case 3:
+    if (windy) {return getBitmap(wi_cloudy_gusts, BitmapSize);}
+    return getBitmap(wi_cloudy, BitmapSize);
+
+  // 45, 48: Fog / depositing rime fog
+  case 45:
+  case 48:
+    if (!cloudy && day)         {return getBitmap(wi_day_fog, BitmapSize);}
+    if (!cloudy && !day && moon){return getBitmap(wi_night_fog, BitmapSize);}
+    return getBitmap(wi_fog, BitmapSize);
+
+  // 51, 53, 55: Drizzle (light / moderate / dense)
+  case 51:
+  case 53:
+  case 55:
     if (!cloudy && day)          {return getBitmap(wi_day_showers, BitmapSize);}
     if (!cloudy && !day && moon) {return getBitmap(wi_night_alt_showers, BitmapSize);}
     return getBitmap(wi_showers, BitmapSize);
-  // Group 5xx: Rain
-  case 500: // Rain          light rain                       10d
-  case 501: // Rain          moderate rain                    10d
-  case 502: // Rain          heavy intensity rain             10d
-  case 503: // Rain          very heavy rain                  10d
-  case 504: // Rain          extreme rain                     10d
+
+  // 56, 57: Freezing drizzle
+  case 56:
+  case 57:
+    if (!cloudy && day)          {return getBitmap(wi_day_rain_mix, BitmapSize);}
+    if (!cloudy && !day && moon) {return getBitmap(wi_night_alt_rain_mix, BitmapSize);}
+    return getBitmap(wi_rain_mix, BitmapSize);
+
+  // 61, 63, 65: Rain (slight / moderate / heavy)
+  case 61:
+  case 63:
     if (!cloudy && day && windy)          {return getBitmap(wi_day_rain_wind, BitmapSize);}
     if (!cloudy && day)                   {return getBitmap(wi_day_rain, BitmapSize);}
     if (!cloudy && !day && moon && windy) {return getBitmap(wi_night_alt_rain_wind, BitmapSize);}
     if (!cloudy && !day && moon)          {return getBitmap(wi_night_alt_rain, BitmapSize);}
     if (windy)                            {return getBitmap(wi_rain_wind, BitmapSize);}
     return getBitmap(wi_rain, BitmapSize);
-  case 511: // Rain          freezing rain                    13d
+  case 65:
+    if (windy) {return getBitmap(wi_rain_wind, BitmapSize);}
+    return getBitmap(wi_rain, BitmapSize);
+
+  // 66, 67: Freezing rain
+  case 66:
+  case 67:
     if (!cloudy && day)          {return getBitmap(wi_day_rain_mix, BitmapSize);}
     if (!cloudy && !day && moon) {return getBitmap(wi_night_alt_rain_mix, BitmapSize);}
     return getBitmap(wi_rain_mix, BitmapSize);
-  case 520: // Rain          light intensity shower rain      09d
-  case 521: // Rain          shower rain                      09d
-  case 522: // Rain          heavy intensity shower rain      09d
-  case 531: // Rain          ragged shower rain               09d
-    if (!cloudy && day)          {return getBitmap(wi_day_showers, BitmapSize);}
-    if (!cloudy && !day && moon) {return getBitmap(wi_night_alt_showers, BitmapSize);}
-    return getBitmap(wi_showers, BitmapSize);
-  // Group 6xx: Snow
-  case 600: // Snow          light snow                       13d
-  case 601: // Snow          Snow                             13d
-  case 602: // Snow          Heavy snow                       13d
+
+  // 71, 73, 75: Snowfall (slight / moderate / heavy)
+  case 71:
+  case 73:
     if (!cloudy && day && windy)          {return getBitmap(wi_day_snow_wind, BitmapSize);}
     if (!cloudy && day)                   {return getBitmap(wi_day_snow, BitmapSize);}
     if (!cloudy && !day && moon && windy) {return getBitmap(wi_night_alt_snow_wind, BitmapSize);}
     if (!cloudy && !day && moon)          {return getBitmap(wi_night_alt_snow, BitmapSize);}
     if (windy)                            {return getBitmap(wi_snow_wind, BitmapSize);}
     return getBitmap(wi_snow, BitmapSize);
-  case 611: // Snow          Sleet                            13d
-  case 612: // Snow          Light shower sleet               13d
-  case 613: // Snow          Shower sleet                     13d
-    if (!cloudy && day)          {return getBitmap(wi_day_sleet, BitmapSize);}
-    if (!cloudy && !day && moon) {return getBitmap(wi_night_alt_sleet, BitmapSize);}
-    return getBitmap(wi_sleet, BitmapSize);
-  case 615: // Snow          Light rain and snow              13d
-  case 616: // Snow          Rain and snow                    13d
-  case 620: // Snow          Light shower snow                13d
-  case 621: // Snow          Shower snow                      13d
-  case 622: // Snow          Heavy shower snow                13d
+  case 75:
+    if (windy) {return getBitmap(wi_snow_wind, BitmapSize);}
+    return getBitmap(wi_snow, BitmapSize);
+
+  // 77: Snow grains
+  case 77:
+    return getBitmap(wi_snow, BitmapSize);
+
+  // 80, 81, 82: Rain showers (slight / moderate / violent)
+  case 80:
+  case 81:
+  case 82:
+    if (!cloudy && day)          {return getBitmap(wi_day_showers, BitmapSize);}
+    if (!cloudy && !day && moon) {return getBitmap(wi_night_alt_showers, BitmapSize);}
+    return getBitmap(wi_showers, BitmapSize);
+
+  // 85, 86: Snow showers (slight / heavy)
+  case 85:
+  case 86:
     if (!cloudy && day)          {return getBitmap(wi_day_rain_mix, BitmapSize);}
     if (!cloudy && !day && moon) {return getBitmap(wi_night_alt_rain_mix, BitmapSize);}
     return getBitmap(wi_rain_mix, BitmapSize);
-  // Group 7xx: Atmosphere
-  case 701: // Mist          mist                             50d
-    if (!cloudy && day)          {return getBitmap(wi_day_fog, BitmapSize);}
-    if (!cloudy && !day && moon) {return getBitmap(wi_night_fog, BitmapSize);}
-    return getBitmap(wi_fog, BitmapSize);
-  case 711: // Smoke         Smoke                            50d
-    return getBitmap(wi_smoke, BitmapSize);
-  case 721: // Haze          Haze                             50d
-    if (day && !cloudy) {return getBitmap(wi_day_haze, BitmapSize);}
-    return getBitmap(wi_dust, BitmapSize);
-  case 731: // Dust          sand/dust whirls                 50d
-    return getBitmap(wi_sandstorm, BitmapSize);
-  case 741: // Fog           fog                              50d
-    if (!cloudy && day)          {return getBitmap(wi_day_fog, BitmapSize);}
-    if (!cloudy && !day && moon) {return getBitmap(wi_night_fog, BitmapSize);}
-    return getBitmap(wi_fog, BitmapSize);
-  case 751: // Sand          sand                             50d
-    return getBitmap(wi_sandstorm, BitmapSize);
-  case 761: // Dust          dust                             50d
-    return getBitmap(wi_dust, BitmapSize);
-  case 762: // Ash           volcanic ash                     50d
-    return getBitmap(wi_volcano, BitmapSize);
-  case 771: // Squall        squalls                          50d
-    return getBitmap(wi_cloudy_gusts, BitmapSize);
-  case 781: // Tornado       tornado                          50d
-    return getBitmap(wi_tornado, BitmapSize);
-  // Group 800: Clear
-  case 800: // Clear         clear sky                        01d 01n
-    if (windy)         {return getBitmap(wi_strong_wind, BitmapSize);}
-    if (!day && moon)  {return getBitmap(wi_night_clear, BitmapSize);}
-    if (!day && !moon) {return getBitmap(wi_stars, BitmapSize);}
-    return getBitmap(wi_day_sunny, BitmapSize);
-  // Group 80x: Clouds
-  case 801: // Clouds        few clouds: 11-25%               02d 02n
-    if (windy)         {return getBitmap(wi_strong_wind, BitmapSize);}
-    if (!day && moon)  {return getBitmap(wi_night_alt_partly_cloudy, BitmapSize);}
-    if (!day && !moon) {return getBitmap(wi_stars, BitmapSize);}
-    return getBitmap(wi_day_sunny_overcast, BitmapSize);
-  case 802: // Clouds        scattered clouds: 25-50%         03d 03n
-  case 803: // Clouds        broken clouds: 51-84%            04d 04n
-    if (windy && day)           {return getBitmap(wi_day_cloudy_gusts, BitmapSize);}
-    if (windy && !day && moon)  {return getBitmap(wi_night_alt_cloudy_gusts, BitmapSize);}
-    if (windy && !day && !moon) {return getBitmap(wi_cloudy_gusts, BitmapSize);}
-    if (!day && moon)           {return getBitmap(wi_night_alt_cloudy, BitmapSize);}
-    if (!day && !moon)          {return getBitmap(wi_cloud, BitmapSize);}
-    return getBitmap(wi_day_cloudy, BitmapSize);
-  case 804: // Clouds        overcast clouds: 85-100%         04d 04n
-    if (windy) {return getBitmap(wi_cloudy_gusts, BitmapSize);}
-    return getBitmap(wi_cloudy, BitmapSize);
+
+  // 95: Thunderstorm (slight or moderate)
+  case 95:
+    if (!cloudy && day)          {return getBitmap(wi_day_thunderstorm, BitmapSize);}
+    if (!cloudy && !day && moon) {return getBitmap(wi_night_alt_thunderstorm, BitmapSize);}
+    return getBitmap(wi_thunderstorm, BitmapSize);
+
+  // 96, 99: Thunderstorm with hail
+  case 96:
+  case 99:
+    if (!cloudy && day)          {return getBitmap(wi_day_storm_showers, BitmapSize);}
+    if (!cloudy && !day && moon) {return getBitmap(wi_night_alt_storm_showers, BitmapSize);}
+    return getBitmap(wi_storm_showers, BitmapSize);
+
   default:
-    // maybe this is a new getBitmap in one of the existing groups
-    if (id >= 200 && id < 300) {return getBitmap(wi_thunderstorm, BitmapSize);}
-    if (id >= 300 && id < 400) {return getBitmap(wi_showers, BitmapSize);}
-    if (id >= 500 && id < 600) {return getBitmap(wi_rain, BitmapSize);}
-    if (id >= 600 && id < 700) {return getBitmap(wi_snow, BitmapSize);}
-    if (id >= 700 && id < 800) {return getBitmap(wi_fog, BitmapSize);}
-    if (id >= 800 && id < 900) {return getBitmap(wi_cloudy, BitmapSize);}
     return getBitmap(wi_na, BitmapSize);
   }
 } // end getConditionsBitmap
 
-/* Takes the daily weather forecast (from OpenWeatherMap API response) and
+/* Takes the daily weather forecast (from Open-Meteo API response) and
  * returns a pointer to the icon's 32x32 bitmap.
  *
  * The daily weather forcast of today is needed for moonrise and moonset times.
  */
-const uint8_t *getHourlyForecastBitmap32(const owm_hourly_t &hourly,
-                                         const owm_daily_t  &today)
+const uint8_t *getHourlyForecastBitmap32(const weather_hourly_t &hourly,
+                                         const weather_daily_t  &today)
 {
   const int id = hourly.weather.id;
   const bool day = isDay(hourly.weather.icon);
@@ -636,10 +633,10 @@ const uint8_t *getHourlyForecastBitmap32(const owm_hourly_t &hourly,
   return getConditionsBitmap<32>(id, day, moon, cloudy, windy);
 }
 
-/* Takes the daily weather forecast (from OpenWeatherMap API response) and
+/* Takes the daily weather forecast (from Open-Meteo API response) and
  * returns a pointer to the icon's 64x64 bitmap.
  */
-const uint8_t *getDailyForecastBitmap64(const owm_daily_t &daily)
+const uint8_t *getDailyForecastBitmap64(const weather_daily_t &daily)
 {
   const int id = daily.weather.id;
   // always show daytime icon for daily forecast
@@ -651,13 +648,13 @@ const uint8_t *getDailyForecastBitmap64(const owm_daily_t &daily)
 } // end getForecastBitmap64
 
 /* Takes the current weather and today's daily weather forcast (from
- * OpenWeatherMap API response) and returns a pointer to the icon's 196x196
+ * Open-Meteo API response) and returns a pointer to the icon's 196x196
  * bitmap.
  *
  * The daily weather forcast of today is needed for moonrise and moonset times.
  */
-const uint8_t *getCurrentConditionsBitmap196(const owm_current_t &current,
-                                             const owm_daily_t   &today)
+const uint8_t *getCurrentConditionsBitmap196(const weather_current_t &current,
+                                             const weather_daily_t   &today)
 {
   const int id = current.weather.id;
   const bool day = isDay(current.weather.icon);
@@ -676,7 +673,7 @@ const uint8_t *getCurrentConditionsBitmap196(const owm_current_t &current,
  * If a relevant category can not be determined, the default alert bitmap will
  * be returned. (warning triangle icon)
  */
-const uint8_t *getAlertBitmap32(const owm_alerts_t &alert)
+const uint8_t *getAlertBitmap32(const weather_alert_t &alert)
 {
   enum alert_category c = getAlertCategory(alert);
   switch (c)
@@ -708,6 +705,7 @@ const uint8_t *getAlertBitmap32(const owm_alerts_t &alert)
   case HURRICANE:            return wi_hurricane_32x32;
   case DUST:                 return wi_dust_32x32;
   case STRONG_WIND:          return wi_strong_wind_32x32;
+  case UV_INDEX:             return wi_day_sunny_32x32;
 
   // this code will never be reached
   default:                   return wi_na_48x48;
@@ -722,7 +720,7 @@ const uint8_t *getAlertBitmap32(const owm_alerts_t &alert)
  * If a relevant category can not be determined, the default alert bitmap will
  * be returned. (warning triangle icon)
  */
-const uint8_t *getAlertBitmap48(const owm_alerts_t &alert)
+const uint8_t *getAlertBitmap48(const weather_alert_t &alert)
 {
   enum alert_category c = getAlertCategory(alert);
   switch (c)
@@ -754,6 +752,7 @@ const uint8_t *getAlertBitmap48(const owm_alerts_t &alert)
   case HURRICANE:            return wi_hurricane_48x48;
   case DUST:                 return wi_dust_48x48;
   case STRONG_WIND:          return wi_strong_wind_48x48;
+  case UV_INDEX:             return wi_day_sunny_48x48;
 
   // this code will never be reached
   default:                   return wi_na_48x48;
@@ -782,7 +781,7 @@ bool containsTerminology(const String s, const std::vector<String> &terminology)
  *
  * Weather alert terminology is defined in the included locale header.
  */
-enum alert_category getAlertCategory(const owm_alerts_t &alert)
+enum alert_category getAlertCategory(const weather_alert_t &alert)
 {
   if (containsTerminology(alert.event, TERM_SMOG))
   {
@@ -875,6 +874,10 @@ enum alert_category getAlertCategory(const owm_alerts_t &alert)
   if (containsTerminology(alert.event, TERM_DUST))
   {
     return alert_category::DUST;
+  }
+  if (containsTerminology(alert.event, TERM_UV_INDEX))
+  {
+    return alert_category::UV_INDEX;
   }
   if (containsTerminology(alert.event, TERM_STRONG_WIND))
   {
@@ -1606,7 +1609,7 @@ static const unsigned char *moon_phase_icon_arr[] = {
  *  scale range to match 28 numbers of different icons
  *  offset +0.5 to shift icon to center of moon phase period
 */
-const uint8_t *getMoonPhaseBitmap48(const owm_daily_t &daily)
+const uint8_t *getMoonPhaseBitmap48(const weather_daily_t &daily)
 {
   int n = static_cast<int>(daily.moon_phase * 28 + 0.5);
     return moon_phase_icon_arr[n];
@@ -1614,7 +1617,7 @@ const uint8_t *getMoonPhaseBitmap48(const owm_daily_t &daily)
 
 
 // Returns the current moon phase string
-  const char *getMoonPhaseStr(const owm_daily_t &daily)
+  const char *getMoonPhaseStr(const weather_daily_t &daily)
 {
   int n = static_cast<int>(daily.moon_phase * 28 + 0.5);
   switch(n)

@@ -45,8 +45,9 @@
 #endif
 
 // too large to allocate locally on stack
-static owm_resp_onecall_t       owm_onecall;
-static owm_resp_air_pollution_t owm_air_pollution;
+static weather_forecast_t       wx_forecast;
+static weather_air_quality_t wx_air_quality;
+static waste_collection_t       waste_collection;
 
 Preferences prefs;
 
@@ -257,13 +258,13 @@ void setup()
   client.setInsecure();
 #elif defined(USE_HTTPS_WITH_CERT_VERIF)
   WiFiClientSecure client;
-  client.setCACert(cert_Sectigo_Public_Server_Authentication_Root_R46);
+  client.setCACert(cert_ISRG_Root_X1);
 #endif
-  int rxStatus = getOWMonecall(client, owm_onecall);
+  int rxStatus = getOpenMeteoForecast(client, wx_forecast);
   if (rxStatus != HTTP_CODE_OK)
   {
     killWiFi();
-    statusStr = "One Call " + OWM_ONECALL_VERSION + " API";
+    statusStr = "Open-Meteo Forecast API";
     tmpStr = String(rxStatus, DEC) + ": " + getHttpResponsePhrase(rxStatus);
     initDisplay();
     do
@@ -273,8 +274,8 @@ void setup()
     powerOffDisplay();
     beginDeepSleep(startTime, &timeInfo);
   }
-  // AIR POLLUTION - use NVS cache when data is < 1 hour old.
-  // OWM updates this endpoint hourly, so fetching every 30min is wasteful.
+  // AIR QUALITY - use NVS cache when data is < 1 hour old.
+  // Open-Meteo updates this endpoint hourly, fetching every 30 min is wasteful.
   // Cache is invalidated if struct size changes (firmware update).
   prefs.begin(NVS_NAMESPACE, false);
   bool aqCacheHit = false;
@@ -283,12 +284,12 @@ void setup()
     time(&now);
     int64_t lastFetch = prefs.getLong64("aqFetchTime", 0);
     uint32_t cachedSize = prefs.getUInt("aqStructSize", 0);
-    if (cachedSize == sizeof(owm_resp_air_pollution_t)
+    if (cachedSize == sizeof(weather_air_quality_t)
         && (now - lastFetch) < 3600)
     {
-      size_t readLen = prefs.getBytes("aqCache", &owm_air_pollution,
-                                      sizeof(owm_air_pollution));
-      aqCacheHit = (readLen == sizeof(owm_air_pollution));
+      size_t readLen = prefs.getBytes("aqCache", &wx_air_quality,
+                                      sizeof(wx_air_quality));
+      aqCacheHit = (readLen == sizeof(wx_air_quality));
       if (aqCacheHit)
       {
         Serial.println("Air Pollution: using NVS cache ("
@@ -300,11 +301,11 @@ void setup()
 
   if (!aqCacheHit)
   {
-    rxStatus = getOWMairpollution(client, owm_air_pollution);
+    rxStatus = getOpenMeteoAirQuality(client, wx_air_quality);
     if (rxStatus != HTTP_CODE_OK)
     {
       killWiFi();
-      statusStr = "Air Pollution API";
+      statusStr = "Open-Meteo Air Quality API";
       tmpStr = String(rxStatus, DEC) + ": " + getHttpResponsePhrase(rxStatus);
       initDisplay();
       do
@@ -319,12 +320,15 @@ void setup()
     {
       time_t now;
       time(&now);
-      prefs.putBytes("aqCache", &owm_air_pollution, sizeof(owm_air_pollution));
+      prefs.putBytes("aqCache", &wx_air_quality, sizeof(wx_air_quality));
       prefs.putLong64("aqFetchTime", (int64_t)now);
-      prefs.putUInt("aqStructSize", sizeof(owm_air_pollution));
+      prefs.putUInt("aqStructSize", sizeof(wx_air_quality));
     }
     prefs.end();
   }
+  // WASTE COLLECTION (myMüll API) - cached per month in NVS, needs WiFi on cache miss
+  getWasteCollection(waste_collection, &timeInfo);
+
   killWiFi(); // WiFi no longer needed
 
   // GET INDOOR TEMPERATURE AND HUMIDITY, start BMEx80...
@@ -384,13 +388,16 @@ void setup()
   initDisplay();
   do
   {
-    drawCurrentConditions(owm_onecall.current, owm_onecall.daily[0],
-                          owm_air_pollution, inTemp, inHumidity);
-    drawOutlookGraph(owm_onecall.hourly, owm_onecall.daily, timeInfo);
-    drawForecast(owm_onecall.daily, timeInfo);
+    drawCurrentConditions(wx_forecast.current, wx_forecast.daily[0],
+                          wx_air_quality, inTemp, inHumidity);
+    drawOutlookGraph(wx_forecast.hourly, wx_forecast.daily, timeInfo);
+    drawForecast(wx_forecast.daily, timeInfo);
     drawLocationDate(CITY_STRING, dateStr);
 #if DISPLAY_ALERTS
-    drawAlerts(owm_onecall.alerts, CITY_STRING, dateStr);
+    drawAlerts(wx_forecast.alerts, CITY_STRING, dateStr);
+#endif
+#ifdef POS_WASTE
+    drawWastePickup(waste_collection);
 #endif
     drawStatusBar(statusStr, refreshTimeStr, wifiRSSI, batteryVoltage);
   } while (display.nextPage());

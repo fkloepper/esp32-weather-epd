@@ -70,9 +70,9 @@ const char *LC_ERA_D_T_FMT = "";
 // ERA_T_FMT               era time format string
 const char *LC_ERA_T_FMT   = "";
 
-// OWM LANGUAGE
+// configured language
 // For full list of languages, see
-// https://openweathermap.org/api/one-call-api#multi
+// https://Open-Meteo.org/api/one-call-api#multi
 // Note: "[only] The contents of the 'description' field will be translated."
 const String OWM_LANG = "nl";
 
@@ -187,7 +187,7 @@ const char *TXT_CRIT_LOW_BATTERY_VOLTAGE = "Critically low battery voltage!";
 // last index is the most urgent keyword. Expected as all lowercase.
 //
 // Note to Translators:
-//   OpenWeatherMap returns alerts in English regardless of the OWM LANGUAGE
+//   Open-Meteo returns alerts in English regardless of the configured language
 //   option or territory. For this reason it is preferred that you do not
 //   translate text related to Alerts. Understandably, it may be undesirable to
 //   see English alerts in territories where English is uncommon. To satisfy
@@ -253,6 +253,8 @@ const std::vector<String> TERM_DUST =
     {"dust", "sand"};
 const std::vector<String> TERM_STRONG_WIND =
     {"wind", "monsoon"};
+const std::vector<String> TERM_UV_INDEX =
+    {"uv", "ultraviolet"};
 
 // AIR QUALITY INDEX
 extern "C" {

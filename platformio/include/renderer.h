@@ -70,33 +70,36 @@ void drawMultiLnString(int16_t x, int16_t y, const String &text,
                        uint16_t color=GxEPD_BLACK);
 void initDisplay();
 void powerOffDisplay();
-void drawCurrentConditions(const owm_current_t &current,
-                           const owm_daily_t &today,
-                           const owm_resp_air_pollution_t &owm_air_pollution,
+void drawCurrentConditions(const weather_current_t &current,
+                           const weather_daily_t &today,
+                           const weather_air_quality_t &wx_air_quality,
                            float inTemp, float inHumidity);
-void drawForecast(const owm_daily_t *daily, tm timeInfo);
-void drawAlerts(std::vector<owm_alerts_t> &alerts,
+void drawForecast(const weather_daily_t *daily, tm timeInfo);
+void drawAlerts(std::vector<weather_alert_t> &alerts,
                 const String &city, const String &date);
 void drawLocationDate(const String &city, const String &date);
-void drawOutlookGraph(const owm_hourly_t *hourly, const owm_daily_t *daily,
+void drawOutlookGraph(const weather_hourly_t *hourly, const weather_daily_t *daily,
                       tm timeInfo);
 void drawStatusBar(const String &statusStr, const String &refreshTimeStr,
                    int rssi, uint32_t batVoltage);
 void drawError(const uint8_t *bitmap_196x196,
                const String &errMsgLn1, const String &errMsgLn2="");
-void drawCurrentSunrise(const owm_current_t &current);
-void drawCurrentSunset(const owm_current_t &current);
+void drawCurrentSunrise(const weather_current_t &current);
+void drawCurrentSunset(const weather_current_t &current);
 void drawCurrentInTemp(float inTemp);
 void drawCurrentInHumidity(float inHumidity);
-void drawCurrentMoonrise(const owm_daily_t &today);
-void drawCurrentMoonset(const owm_daily_t &today);
-void drawCurrentWind(const owm_current_t &current);
-void drawCurrentHumidity(const owm_current_t &current);
-void drawCurrentUVI(const owm_current_t &current);
-void drawCurrentPressure(const owm_current_t &current);
-void drawCurrentVisibility(const owm_current_t &current);
-void drawCurrentAirQuality(const owm_resp_air_pollution_t &owm_air_pollution);
-void drawCurrentMoonphase(const owm_daily_t &today);
-void drawCurrentDewpoint(const owm_current_t &current);
+void drawCurrentMoonrise(const weather_daily_t &today);
+void drawCurrentMoonset(const weather_daily_t &today);
+void drawCurrentWind(const weather_current_t &current);
+void drawCurrentHumidity(const weather_current_t &current);
+void drawCurrentUVI(const weather_current_t &current);
+void drawCurrentPressure(const weather_current_t &current);
+void drawCurrentVisibility(const weather_current_t &current);
+void drawCurrentAirQuality(const weather_air_quality_t &wx_air_quality);
+void drawCurrentMoonphase(const weather_daily_t &today);
+void drawCurrentDewpoint(const weather_current_t &current);
+#ifdef POS_WASTE
+void drawWastePickup(const waste_collection_t &wc);
+#endif
 
 #endif

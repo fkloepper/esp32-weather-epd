@@ -32,12 +32,15 @@ void killWiFi();
 bool waitForSNTPSync(tm *timeInfo);
 bool printLocalTime(tm *timeInfo);
 #ifdef USE_HTTP
-  int getOWMonecall(WiFiClient &client, owm_resp_onecall_t &r);
-  int getOWMairpollution(WiFiClient &client, owm_resp_air_pollution_t &r);
+  int getOpenMeteoForecast(WiFiClient &client, weather_forecast_t &r);
+  int getOpenMeteoAirQuality(WiFiClient &client, weather_air_quality_t &r);
 #else
-  int getOWMonecall(WiFiClientSecure &client, owm_resp_onecall_t &r);
-  int getOWMairpollution(WiFiClientSecure &client, owm_resp_air_pollution_t &r);
+  int getOpenMeteoForecast(WiFiClientSecure &client, weather_forecast_t &r);
+  int getOpenMeteoAirQuality(WiFiClientSecure &client, weather_air_quality_t &r);
 #endif
+// Waste collection (myMüll API). Always uses HTTPS with no cert verification.
+// Uses NVS to cache data for the entire month (refetches only on month change).
+int getWasteCollection(waste_collection_t &wc, const tm *timeInfo);
 
 
 #endif

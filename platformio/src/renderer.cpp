@@ -266,7 +266,7 @@ void powerOffDisplay()
 
 // drawCurrentSunrise
 #ifdef POS_SUNRISE
-void drawCurrentSunrise(const owm_current_t &current)
+void drawCurrentSunrise(const weather_current_t &current)
 {
   String dataStr, unitStr;
   int PosX = POS_SUNRISE % 2;
@@ -294,7 +294,7 @@ void drawCurrentSunrise(const owm_current_t &current)
 
 // drawCurrentWind
 #ifdef POS_WIND
-void drawCurrentWind(const owm_current_t &current)
+void drawCurrentWind(const weather_current_t &current)
 {
   String dataStr, unitStr;
   int PosX = (POS_WIND % 2);
@@ -376,7 +376,7 @@ void drawCurrentWind(const owm_current_t &current)
 
 // drawCurrentUVI
 #ifdef POS_UVI
-void drawCurrentUVI(const owm_current_t &current)
+void drawCurrentUVI(const weather_current_t &current)
 {
   String dataStr, unitStr;
   int PosX = (POS_UVI % 2);
@@ -430,7 +430,7 @@ void drawCurrentUVI(const owm_current_t &current)
 
 // drawCurrentAirQuality
 #ifdef POS_AIR_QULITY
-void drawCurrentAirQuality(const owm_resp_air_pollution_t &owm_air_pollution)
+void drawCurrentAirQuality(const weather_air_quality_t &wx_air_quality)
 {
   String dataStr, unitStr;
   int PosX = (POS_AIR_QULITY % 2);
@@ -459,8 +459,8 @@ void drawCurrentAirQuality(const owm_resp_air_pollution_t &owm_air_pollution)
 
   // air quality index
   display.setFont(&FONT_12pt8b);
-  const owm_components_t &c = owm_air_pollution.components;
-  // OpenWeatherMap does not provide pb (lead) conentrations, so we pass NULL.
+  const weather_air_components_t &c = wx_air_quality.components;
+  // Open-Meteo does not provide pb (lead) conentrations, so we pass NULL.
   int aqi = calc_aqi(AQI_SCALE, c.co, c.nh3, c.no, c.no2, c.o3, NULL, c.so2,
                                 c.pm10, c.pm2_5);
   int aqi_max = aqi_scale_max(AQI_SCALE);
@@ -549,7 +549,7 @@ void drawCurrentInTemp(float inTemp)
 
 // drawCurrentSunset
 #ifdef POS_SUNSET
-void drawCurrentSunset(const owm_current_t &current)
+void drawCurrentSunset(const weather_current_t &current)
 {
   String dataStr, unitStr;
   int PosX = (POS_SUNSET % 2);
@@ -577,7 +577,7 @@ void drawCurrentSunset(const owm_current_t &current)
 
 // drawCurrentHumidity
 #ifdef POS_HUMIDITY
-void drawCurrentHumidity(const owm_current_t &current)
+void drawCurrentHumidity(const weather_current_t &current)
 {
   String dataStr, unitStr;
   int PosX = (POS_HUMIDITY % 2);
@@ -605,7 +605,7 @@ void drawCurrentHumidity(const owm_current_t &current)
 
 // drawCurrentPressure
 #ifdef POS_PRESSURE
-void drawCurrentPressure(const owm_current_t &current)
+void drawCurrentPressure(const weather_current_t &current)
 {
   String dataStr, unitStr;
   int PosX = (POS_PRESSURE % 2);
@@ -675,7 +675,7 @@ void drawCurrentPressure(const owm_current_t &current)
 
 // drawCurrentVisibility
 #ifdef POS_VISIBILITY
-void drawCurrentVisibility(const owm_current_t &current)
+void drawCurrentVisibility(const weather_current_t &current)
 {
   String dataStr, unitStr;
   int PosX = (POS_VISIBILITY % 2);
@@ -766,7 +766,7 @@ void drawCurrentInHumidity(float inHumidity)
 
 // drawCurrentMoonrise
 #ifdef POS_MOONRISE
-void drawCurrentMoonrise(const owm_daily_t &today)
+void drawCurrentMoonrise(const weather_daily_t &today)
 {
   String dataStr, unitStr;
   int PosX = POS_MOONRISE % 2;
@@ -795,7 +795,7 @@ void drawCurrentMoonrise(const owm_daily_t &today)
 
 // drawCurrentMoonset
 #ifdef POS_MOONSET
-void drawCurrentMoonset(const owm_daily_t &today)
+void drawCurrentMoonset(const weather_daily_t &today)
 {
   String dataStr, unitStr;
   int PosX = (POS_MOONSET % 2);
@@ -823,7 +823,7 @@ void drawCurrentMoonset(const owm_daily_t &today)
 
 // drawCurrentMoonphase
 #ifdef POS_MOONPHASE
-void drawCurrentMoonphase(const owm_daily_t &daily)
+void drawCurrentMoonphase(const weather_daily_t &daily)
 {
   String dataStr, unitStr;
   int PosX = (POS_MOONPHASE % 2);
@@ -870,7 +870,7 @@ void drawCurrentMoonphase(const owm_daily_t &daily)
 
 // drawCurrentDewpoint
 #ifdef POS_DEWPOINT
-void drawCurrentDewpoint(const owm_current_t &current)
+void drawCurrentDewpoint(const weather_current_t &current)
 {
   String dataStr, unitStr;
   int PosX = (POS_DEWPOINT % 2);
@@ -919,9 +919,9 @@ void drawCurrentDewpoint(const owm_current_t &current)
 /* This function is responsible for drawing the current conditions and
  * associated icons.
  */
-void drawCurrentConditions(const owm_current_t &current,
-                           const owm_daily_t &today,
-                           const owm_resp_air_pollution_t &owm_air_pollution,
+void drawCurrentConditions(const weather_current_t &current,
+                           const weather_daily_t &today,
+                           const weather_air_quality_t &wx_air_quality,
                            float inTemp, float inHumidity)
 {
   String dataStr, unitStr;
@@ -1013,7 +1013,7 @@ void drawCurrentConditions(const owm_current_t &current,
     # endif
 
     # ifdef POS_AIR_QULITY
-      drawCurrentAirQuality(owm_air_pollution);
+      drawCurrentAirQuality(wx_air_quality);
     # endif
 
     # ifdef POS_INTEMP
@@ -1047,7 +1047,7 @@ void drawCurrentConditions(const owm_current_t &current,
 
 /* This function is responsible for drawing the five day forecast.
  */
-void drawForecast(const owm_daily_t *daily, tm timeInfo)
+void drawForecast(const weather_daily_t *daily, tm timeInfo)
 {
   // 5 day, forecast
   String hiStr, loStr;
@@ -1149,7 +1149,7 @@ void drawForecast(const owm_daily_t *daily, tm timeInfo)
   /* This function is responsible for drawing the current alerts if any.
    * Up to 2 alerts can be drawn.
    */
-  void drawAlerts(std::vector<owm_alerts_t> & alerts,
+  void drawAlerts(std::vector<weather_alert_t> & alerts,
                   const String &city, const String &date)
   {
 #if DEBUG_LEVEL >= 1
@@ -1207,7 +1207,7 @@ void drawForecast(const owm_daily_t *daily, tm timeInfo)
     // adjust max width to for 48x48 icons
     max_w -= 48;
 
-    owm_alerts_t &cur_alert = alerts[alert_indices[0]];
+    weather_alert_t &cur_alert = alerts[alert_indices[0]];
     display.drawInvertedBitmap(196, 8, getAlertBitmap48(cur_alert), 48, 48,
                                ACCENT_COLOR);
     // must be called after getAlertBitmap
@@ -1240,7 +1240,7 @@ void drawForecast(const owm_daily_t *daily, tm timeInfo)
     display.setFont(&FONT_12pt8b);
     for (int i = 0; i < 2; ++i)
     {
-      owm_alerts_t &cur_alert = alerts[alert_indices[i]];
+      weather_alert_t &cur_alert = alerts[alert_indices[i]];
 
       display.drawInvertedBitmap(196, (i * 32), getAlertBitmap32(cur_alert),
                                  32, 32, ACCENT_COLOR);
@@ -1304,7 +1304,7 @@ int kelvin_to_plot_y(float kelvin, int tempBoundMin, float yPxPerUnit,
 /* This function is responsible for drawing the outlook graph for the specified
  * number of hours(up to 48).
  */
-void drawOutlookGraph(const owm_hourly_t *hourly, const owm_daily_t *daily,
+void drawOutlookGraph(const weather_hourly_t *hourly, const weather_daily_t *daily,
                       tm timeInfo)
 {
   const int xPos0 = 350;
@@ -1647,6 +1647,58 @@ void drawOutlookGraph(const owm_hourly_t *hourly, const owm_daily_t *daily,
 /* This function is responsible for drawing the status bar along the bottom of
  * the display.
  */
+/* Draws the next waste pickup as a stat panel in the left-panel grid.
+ * Uses POS_WASTE (slot 9) — same layout as sunrise/humidity/etc.
+ * Label = waste type (e.g. "Biotonne"), value = relative day (heute/morgen/DD.MM.)
+ */
+#ifdef POS_WASTE
+void drawWastePickup(const waste_collection_t &wc)
+{
+  int PosX = (POS_WASTE % 2);
+  int PosY = static_cast<int>(POS_WASTE / 2);
+
+  // icon: simple procedural trash-bin drawn with lines/rects
+  const int ix = 162 * PosX;
+  const int iy = 204 + (48 + 8) * PosY;
+  // bin body (30w × 28h, centred in 48×48 cell)
+  const int bx = ix + 9, by = iy + 14, bw = 30, bh = 28;
+  display.drawRect(bx, by, bw, bh, GxEPD_BLACK);
+  // lid (slightly wider)
+  display.drawRect(bx - 2, by - 4, bw + 4, 4, GxEPD_BLACK);
+  // handle on lid
+  display.drawRect(bx + 9, by - 7, bw - 14, 4, GxEPD_BLACK);
+  // three vertical lines inside bin
+  for (int i = 1; i <= 3; ++i)
+  {
+    int lx = bx + (bw * i) / 4;
+    display.drawLine(lx, by + 5, lx, by + bh - 5, GxEPD_BLACK);
+  }
+
+  if (!wc.valid)
+  {
+    display.setFont(&FONT_7pt8b);
+    drawString(48 + (162 * PosX), 204 + 17 / 2 + (48 + 8) * PosY + 48 / 2, "--", LEFT);
+    return;
+  }
+
+  // label = waste type
+  display.setFont(&FONT_7pt8b);
+  drawString(48 + (162 * PosX), 204 + 10 + (48 + 8) * PosY, wc.next.title, LEFT);
+
+  // value = relative day
+  String dayLabel;
+  if      (wc.days == 0) dayLabel = "heute";
+  else if (wc.days == 1) dayLabel = "morgen";
+  else
+  {
+    String d = wc.next.day; // "YYYY-MM-DD"
+    dayLabel = d.substring(8, 10) + "." + d.substring(5, 7) + ".";
+  }
+  display.setFont(&FONT_12pt8b);
+  drawString(48 + (162 * PosX), 204 + 17 / 2 + (48 + 8) * PosY + 48 / 2, dayLabel, LEFT);
+} // drawWastePickup
+#endif
+
 void drawStatusBar(const String &statusStr, const String &refreshTimeStr,
                    int rssi, uint32_t batVoltage)
 {
