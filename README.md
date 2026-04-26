@@ -29,6 +29,20 @@ Here are two (slightly outdated) examples utilizing various configuration option
   <img src="showcase/demo-london.jpg" width="49%" />
 </p>
 
+## Changes
+
+This fork includes the following changes from the upstream project:
+
+- **Open-Meteo instead of OpenWeatherMap** — Weather and air quality data is now fetched from [Open-Meteo](https://open-meteo.com), a free and open-source weather API that requires no API key. All internal identifiers have been renamed accordingly (`weather_*` / `wx_forecast`, `wx_air_quality`).
+
+- **Air quality fetched hourly** — Air quality data is only requested once per hour instead of on every update cycle, reducing unnecessary API calls and saving battery.
+
+- **Waste collection display** — Upcoming waste/garbage collection dates are fetched from the [myMüll / jumomind.com](https://www.jumomind.com/mmapp/api.php) API and shown as a widget on the display.
+
+- **UV-Index warning** — A UV alert is triggered when the forecasted peak UV index for the day reaches or exceeds 5. This uses the same alert system as weather warnings and displays a sun icon in the alert area.
+
+- **Battery charging indicator** — When the ESP32 detects that the battery is actively charging (via the CN3065 CHRG pin on GPIO25), the status bar shows a charging icon instead of the regular battery level indicator.
+
 ## Contents
 
 - [Required Components](#required-components)

@@ -81,7 +81,7 @@ void drawLocationDate(const String &city, const String &date);
 void drawOutlookGraph(const weather_hourly_t *hourly, const weather_daily_t *daily,
                       tm timeInfo);
 void drawStatusBar(const String &statusStr, const String &refreshTimeStr,
-                   int rssi, uint32_t batVoltage);
+                   int rssi, uint32_t batVoltage, bool charging = false);
 void drawError(const uint8_t *bitmap_196x196,
                const String &errMsgLn1, const String &errMsgLn2="");
 void drawCurrentSunrise(const weather_current_t &current);

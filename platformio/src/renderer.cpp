@@ -1700,7 +1700,7 @@ void drawWastePickup(const waste_collection_t &wc)
 #endif
 
 void drawStatusBar(const String &statusStr, const String &refreshTimeStr,
-                   int rssi, uint32_t batVoltage)
+                   int rssi, uint32_t batVoltage, bool charging)
 {
   String dataStr;
   uint16_t dataColor = GxEPD_BLACK;
@@ -1732,7 +1732,9 @@ void drawStatusBar(const String &statusStr, const String &refreshTimeStr,
 #endif
   pos -= 24;
   display.drawInvertedBitmap(pos, DISP_HEIGHT - 1 - 17,
-                             getBatBitmap24(batPercent), 24, 24, dataColor);
+                             charging ? battery_charging_full_90deg_24x24
+                                      : getBatBitmap24(batPercent),
+                             24, 24, dataColor);
   pos -= sp + 9;
 #endif
 

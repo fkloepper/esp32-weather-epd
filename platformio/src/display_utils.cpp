@@ -92,6 +92,34 @@ uint32_t readBatteryVoltage()
   return batteryVoltage;
 } // end readBatteryVoltage
 
+/* Returns true if the battery is currently charging.
+ * Uses PIN_BAT_CHG (CN3065 CHRG, open-drain active-LOW).
+ * Returns false if PIN_BAT_CHG == 255 (feature disabled).
+ *
+ * Hardware note: On the FireBeetle 2 ESP32-E the CN3065 CHRG pin is connected
+ * to GPIO25. CHRG is driven LOW by the CN3065 during active charging and is
+ * high-impedance (floating) when charging is complete or no USB power is
+ * present. INPUT_PULLUP provides the pull-up needed for a reliable HIGH read
+ * in the non-charging state.
+ */
+bool readBatteryCharging()
+{
+  if (PIN_BAT_CHG == 255)
+  {
+    return false;
+  }
+  pinMode(PIN_BAT_CHG, INPUT_PULLUP);
+  delay(5); // allow pull-up to settle before sampling
+  bool charging = (digitalRead(PIN_BAT_CHG) == LOW);
+#if DEBUG_LEVEL >= 1
+  Serial.print("[debug] PIN_BAT_CHG (GPIO");
+  Serial.print(PIN_BAT_CHG);
+  Serial.print(") = ");
+  Serial.println(charging ? "LOW (charging)" : "HIGH (not charging)");
+#endif
+  return charging;
+} // end readBatteryCharging
+
 /* Returns battery percentage, rounded to the nearest integer.
  * Takes a voltage in millivolts and uses a sigmoidal approximation to find an
  * approximation of the battery life percentage remaining.

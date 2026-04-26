@@ -196,8 +196,10 @@ void setup()
   {
     prefs.putBool("lowBat", false);
   }
+  bool batteryCharging = readBatteryCharging();
 #else
   uint32_t batteryVoltage = UINT32_MAX;
+  bool batteryCharging = false;
 #endif
 
   // All data should have been loaded from NVS. Close filesystem.
@@ -399,7 +401,8 @@ void setup()
 #ifdef POS_WASTE
     drawWastePickup(waste_collection);
 #endif
-    drawStatusBar(statusStr, refreshTimeStr, wifiRSSI, batteryVoltage);
+    drawStatusBar(statusStr, refreshTimeStr, wifiRSSI, batteryVoltage,
+                   batteryCharging);
   } while (display.nextPage());
   powerOffDisplay();
 
